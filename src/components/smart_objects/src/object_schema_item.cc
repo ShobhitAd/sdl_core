@@ -136,10 +136,10 @@ errors::eType CObjectSchemaItem::validate(
     }
     const SmartObject& field = object.getElement(key);
 
-    
+    errors::eType result = errors::OK;
     // Check if MessageVersion matches schema version
     if (correct_member) {
-      errors::eType result =
+      result =
           correct_member->mSchemaItem->validate(field,
                                                 &report__->ReportSubobject(key),
                                                 MessageVersion,
