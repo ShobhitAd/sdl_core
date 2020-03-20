@@ -1490,9 +1490,6 @@ bool CacheManager::SetMetaInfo(const std::string& ccpu_version,
   *(module_meta->ccpu_version) = ccpu_version;
   *(module_meta->wers_country_code) = wers_country_code;
   *(module_meta->language) = language;
-  // We have to set preloaded flag as false in policy table on any response
-  // of GetSystemInfo (SDLAQ-CRS-2365)
-  *(pt_->policy_table.module_config.preloaded_pt) = false;
   Backup();
   return true;
 }
