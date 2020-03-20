@@ -54,6 +54,7 @@
 #include "resumption/last_state_impl.h"
 #include "resumption/last_state_wrapper_impl.h"
 #include "utils/file_system.h"
+#include "utils/jsoncpp_reader_wrapper.h"
 
 namespace test {
 namespace components {
@@ -1127,6 +1128,155 @@ TEST_F(HMICapabilitiesTest,
   EXPECT_EQ(ccpu_version_new, hmi_capabilities->ccpu_version());
 
   EXPECT_FALSE(file_system::FileExists(file_cache_name_));
+}
+
+TEST_F(HMICapabilitiesTest,
+       SaveCachedCapabilitiesToFile_CacheFileNameNotSpecified_NoNeedToSave) {
+  MockApplicationManager mock_app_mngr;
+  event_engine_test::MockEventDispatcher mock_dispatcher;
+  MockApplicationManagerSettings mock_application_manager_settings;
+  const smart_objects::CSmartSchema schema;
+  const std::string hmi_capabilities_empty_file_name = "";
+  const std::vector<std::string> sections_to_update{hmi_response::language};
+
+  EXPECT_CALL(mock_app_mngr, event_dispatcher())
+      .WillOnce(ReturnRef(mock_dispatcher));
+  EXPECT_CALL(mock_app_mngr, get_settings())
+      .WillRepeatedly(ReturnRef(mock_application_manager_settings));
+  EXPECT_CALL(mock_application_manager_settings,
+              hmi_capabilities_cache_file_name())
+      .WillOnce(ReturnRef(hmi_capabilities_empty_file_name));
+
+  auto hmi_capabilities =
+      std::make_shared<HMICapabilitiesForTesting>(mock_app_mngr);
+
+  EXPECT_TRUE(hmi_capabilities->SaveCachedCapabilitiesToFile(
+      hmi_interface::tts, sections_to_update, schema));
+}
+
+TEST_F(HMICapabilitiesTest, SaveCachedCapabilitiesToFile_ParseFile_Failed) {
+  MockApplicationManager mock_app_mngr;
+  event_engine_test::MockEventDispatcher mock_dispatcher;
+  MockApplicationManagerSettings mock_application_manager_settings;
+  const smart_objects::CSmartSchema schema;
+  const std::vector<std::string> sections_to_update{hmi_response::language};
+
+  EXPECT_CALL(mock_app_mngr, event_dispatcher())
+      .WillOnce(ReturnRef(mock_dispatcher));
+  EXPECT_CALL(mock_app_mngr, get_settings())
+      .WillRepeatedly(ReturnRef(mock_application_manager_settings));
+  EXPECT_CALL(mock_application_manager_settings,
+              hmi_capabilities_cache_file_name())
+      .WillOnce(ReturnRef(file_cache_name_));
+
+  auto hmi_capabilities =
+      std::make_shared<HMICapabilitiesForTesting>(mock_app_mngr);
+
+  file_system::CreateFile(file_cache_name_);
+  EXPECT_TRUE(file_system::FileExists(file_cache_name_));
+
+  EXPECT_FALSE(hmi_capabilities->SaveCachedCapabilitiesToFile(
+      hmi_interface::tts, sections_to_update, schema));
+}
+
+TEST_F(HMICapabilitiesTest,
+       SaveCachedCapabilitiesToFile_ParsedFieldsSave_Success) {
+  MockApplicationManager mock_app_mngr;
+  event_engine_test::MockEventDispatcher mock_dispatcher;
+  MockApplicationManagerSettings mock_application_manager_settings;
+  const smart_objects::CSmartSchema schema;
+  const std::vector<std::string> sections_to_update{
+      hmi_response::display_capabilities};
+  const std::string content_to_save = "{\"field\" : \"value\" }";
+
+  EXPECT_CALL(mock_app_mngr, event_dispatcher())
+      .WillOnce(ReturnRef(mock_dispatcher));
+  EXPECT_CALL(mock_app_mngr, get_settings())
+      .WillRepeatedly(ReturnRef(mock_application_manager_settings));
+  EXPECT_CALL(mock_application_manager_settings,
+              hmi_capabilities_cache_file_name())
+      .WillOnce(ReturnRef(file_cache_name_));
+
+  auto hmi_capabilities =
+      std::make_shared<HMICapabilitiesForTesting>(mock_app_mngr);
+
+  file_system::CreateFile(file_cache_name_);
+  EXPECT_TRUE(file_system::FileExists(file_cache_name_));
+
+  const std::vector<uint8_t> binary_data_to_save(content_to_save.begin(),
+                                                 content_to_save.end());
+  file_system::Write(file_cache_name_, binary_data_to_save);
+
+  EXPECT_TRUE(hmi_capabilities->SaveCachedCapabilitiesToFile(
+      hmi_interface::tts, sections_to_update, schema));
+
+  std::string content_after_update;
+  EXPECT_TRUE(file_system::ReadFile(file_cache_name_, content_after_update));
+  EXPECT_NE(content_after_update, content_to_save);
+}
+
+TEST_F(HMICapabilitiesTest, PrepareJsonValueForSaving_Success) {
+  MockApplicationManager mock_app_mngr;
+  event_engine_test::MockEventDispatcher mock_dispatcher;
+  MockApplicationManagerSettings mock_application_manager_settings;
+  const smart_objects::CSmartSchema schema;
+
+  const std::vector<std::string> sections_to_update{
+      hmi_response::display_capabilities,
+      hmi_response::hmi_zone_capabilities,
+      hmi_response::soft_button_capabilities,
+      strings::audio_pass_thru_capabilities,
+      strings::hmi_capabilities,
+      strings::system_capabilities,
+      hmi_response::languages};
+
+  const std::vector<std::string> interfaces_name{
+      hmi_interface::tts,
+      hmi_interface::vr,
+      hmi_interface::ui,
+      hmi_interface::buttons,
+      hmi_interface::vehicle_info,
+      hmi_interface::rc,
+      hmi_response::speech_capabilities,
+      hmi_response::prerecorded_speech_capabilities,
+      hmi_response::button_capabilities,
+      hmi_response::preset_bank_capabilities};
+
+  const std::string content_to_save = "{\"field\" : \"value\" }";
+  const std::vector<uint8_t> binary_data_to_save(content_to_save.begin(),
+                                                 content_to_save.end());
+
+  EXPECT_CALL(mock_app_mngr, event_dispatcher())
+      .WillOnce(ReturnRef(mock_dispatcher));
+  EXPECT_CALL(mock_app_mngr, get_settings())
+      .WillRepeatedly(ReturnRef(mock_application_manager_settings));
+  EXPECT_CALL(mock_application_manager_settings,
+              hmi_capabilities_cache_file_name())
+      .WillRepeatedly(ReturnRef(file_cache_name_));
+
+  auto hmi_capabilities =
+      std::make_shared<HMICapabilitiesForTesting>(mock_app_mngr);
+
+  file_system::CreateFile(file_cache_name_);
+  EXPECT_TRUE(file_system::FileExists(file_cache_name_));
+
+  file_system::Write(file_cache_name_, binary_data_to_save);
+
+  for (size_t i = 0; i < interfaces_name.size(); i++) {
+    EXPECT_TRUE(hmi_capabilities->SaveCachedCapabilitiesToFile(
+        interfaces_name[i], sections_to_update, schema));
+  }
+
+  std::string content_after_update;
+  EXPECT_TRUE(file_system::ReadFile(file_cache_name_, content_after_update));
+
+  Json::Value root_node;
+  utils::JsonReader reader;
+  EXPECT_TRUE(reader.parse(content_after_update, &root_node));
+
+  for (size_t i = 0; i < interfaces_name.size(); i++) {
+    EXPECT_TRUE(static_cast<bool>(root_node[interfaces_name[i]]));
+  }
 }
 
 }  // namespace application_manager_test
