@@ -315,6 +315,7 @@ class HMICapabilitiesTest : public ::testing::Test {
   }
 
   void TearDown() OVERRIDE {
+    DeleteFileIfExists(kHmiCapabilitiesCacheDefaultFile);
     hmi_capabilities_test.reset();
   }
   static void TearDownTestCase() {
